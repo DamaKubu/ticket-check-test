@@ -1,4 +1,5 @@
 #!/bin/sh
+# ticket-commit-msg-hook (marker used by install-hooks.sh — keep this line)
 # Ensures the commit subject starts with a ticket key (e.g. "DBOX-1023: ...").
 # If it's missing, the ticket is taken from the branch name and prefixed automatically.
 
