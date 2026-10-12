@@ -1,0 +1,36 @@
+#!/bin/sh
+# Ensures the commit subject starts with a ticket key (e.g. "DBOX-1023: ...").
+# If it's missing, the ticket is taken from the branch name and prefixed automatically.
+
+msg_file="$1"
+ticket_re='[A-Z][A-Z0-9]+-[0-9]+'
+
+subject=$(head -n1 "$msg_file")
+
+# Leave git-generated messages alone.
+case "$subject" in
+  Merge*|Revert*|fixup!*|squash!*|amend!*) exit 0 ;;
+esac
+
+# Already has a ticket at the start — nothing to do.
+if printf '%s' "$subject" | grep -qE "^$ticket_re"; then
+  exit 0
+fi
+
+branch=$(git symbolic-ref --short HEAD 2>/dev/null)
+if [ -z "$branch" ]; then
+  # Detached HEAD (e.g. rewording during a rebase) — don't block.
+  echo "commit-msg: warning: no branch and no ticket in message" >&2
+  exit 0
+fi
+
+ticket=$(printf '%s' "$branch" | grep -oiE "$ticket_re" | head -n1 | tr '[:lower:]' '[:upper:]')
+if [ -z "$ticket" ]; then
+  echo "commit-msg: no ticket found in the message or the branch name ('$branch')." >&2
+  echo "  Start the message with a ticket, e.g.  DBOX-1023: Fix dashboard map" >&2
+  echo "  or name the branch like               DBOX-1023-fix-dashboard-map" >&2
+  exit 1
+fi
+
+tmp="$msg_file.tmp"
+{ printf '%s: ' "$ticket"; cat "$msg_file"; } > "$tmp" && mv "$tmp" "$msg_file"

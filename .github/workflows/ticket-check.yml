@@ -1,0 +1,33 @@
+name: Ticket check
+
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize]
+
+permissions: {}
+
+jobs:
+  ticket:
+    runs-on: ubuntu-latest
+    if: github.actor != 'dependabot[bot]'
+    steps:
+      - name: PR title and branch must reference a ticket
+        # Passed via env, never interpolated into the script (PR titles are untrusted input).
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+          BRANCH: ${{ github.head_ref }}
+        run: |
+          re='[A-Z][A-Z0-9]+-[0-9]+'
+          fail=0
+
+          if ! printf '%s' "$TITLE" | grep -qE "^$re"; then
+            echo "::error::PR title must start with a ticket, e.g. 'DBOX-1023: Fix dashboard map'. Got: '$TITLE'"
+            fail=1
+          fi
+
+          if ! printf '%s' "$BRANCH" | grep -qiE "$re"; then
+            echo "::error::Branch name must contain a ticket, e.g. 'DBOX-1023-fix-dashboard-map'. Got: '$BRANCH'"
+            fail=1
+          fi
+
+          exit $fail
