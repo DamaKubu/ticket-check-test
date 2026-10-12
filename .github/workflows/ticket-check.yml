@@ -4,30 +4,40 @@ on:
   pull_request:
     types: [opened, edited, reopened, synchronize]
 
-permissions: {}
+permissions:
+  pull-requests: read
 
 jobs:
   ticket:
     runs-on: ubuntu-latest
     if: github.actor != 'dependabot[bot]'
     steps:
-      - name: PR title and branch must reference a ticket
-        # Passed via env, never interpolated into the script (PR titles are untrusted input).
+      - name: Branch and every commit must reference a ticket
+        # Passed via env, never interpolated into the script (branch names are untrusted input).
         env:
-          TITLE: ${{ github.event.pull_request.title }}
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
           BRANCH: ${{ github.head_ref }}
         run: |
           re='[A-Z][A-Z0-9]+-[0-9]+'
           fail=0
-
-          if ! printf '%s' "$TITLE" | grep -qE "^$re"; then
-            echo "::error::PR title must start with a ticket, e.g. 'DBOX-1023: Fix dashboard map'. Got: '$TITLE'"
-            fail=1
-          fi
 
           if ! printf '%s' "$BRANCH" | grep -qiE "$re"; then
             echo "::error::Branch name must contain a ticket, e.g. 'DBOX-1023-fix-dashboard-map'. Got: '$BRANCH'"
             fail=1
           fi
 
+          # One line per commit: "<sha> <subject>", skipping merge commits.
+          gh api "repos/$REPO/pulls/$PR/commits" --paginate \
+            --jq '.[] | select((.parents | length) < 2) | "\(.sha[0:7]) \(.commit.message | split("\n")[0])"' > commits.txt
+
+          untagged=$(grep -vE "^[0-9a-f]{7} ($re|Revert )" commits.txt || true)
+          if [ -n "$untagged" ]; then
+            echo "::error::Commits without a ticket at the start of the message (install the commit-msg hook, see install-hooks.sh):"
+            printf '%s\n' "$untagged" | while read -r line; do echo "::error::  $line"; done
+            fail=1
+          fi
+
+          echo "Checked $(wc -l < commits.txt) commit(s)."
           exit $fail
