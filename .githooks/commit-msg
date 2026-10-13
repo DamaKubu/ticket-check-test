@@ -1,5 +1,4 @@
 #!/bin/sh
-# ticket-commit-msg-hook (marker used by install-hooks.sh — keep this line)
 # Ensures the commit subject starts with a ticket key (e.g. "DBOX-1023: ...").
 # If it's missing, the ticket is taken from the branch name and prefixed automatically.
 
@@ -20,7 +19,14 @@ fi
 
 branch=$(git symbolic-ref --short HEAD 2>/dev/null)
 if [ -z "$branch" ]; then
-  # Detached HEAD (e.g. rewording during a rebase) — don't block.
+  # Mid-rebase HEAD is detached; git keeps the branch being rebased here.
+  for d in rebase-merge rebase-apply; do
+    f=$(git rev-parse --git-path "$d/head-name")
+    [ -f "$f" ] && branch=$(sed 's|^refs/heads/||' "$f") && break
+  done
+fi
+if [ -z "$branch" ]; then
+  # Plain detached HEAD — don't block.
   echo "commit-msg: warning: no branch and no ticket in message" >&2
   exit 0
 fi
